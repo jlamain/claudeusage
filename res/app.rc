@@ -1,0 +1,26 @@
+#include <winresrc.h>
+
+/* Tray icons: green (normal), yellow (warning), red (critical) */
+1001 ICON "app_green.ico"
+1002 ICON "app_yellow.ico"
+1003 ICON "app_red.ico"
+
+VS_VERSION_INFO VERSIONINFO
+FILEVERSION    1,0,0,0
+PRODUCTVERSION 1,0,0,0
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904E4"
+        BEGIN
+            VALUE "FileDescription", "Claude Pro Usage Monitor"
+            VALUE "ProductName",     "ClaudeUsage"
+            VALUE "FileVersion",     "1.0.0"
+            VALUE "ProductVersion",  "1.0.0"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x0409, 1252
+    END
+END
