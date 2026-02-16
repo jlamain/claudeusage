@@ -13,6 +13,7 @@ typedef struct {
     BOOL   extra_enabled;
     double extra_limit;          /* monthly limit in cents */
     double extra_used;           /* used credits in cents */
+    char   subscription_type[32]; /* e.g., "pro", "max", "max_200" */
     BOOL   valid;
     char   error[256];
 } UsageData;

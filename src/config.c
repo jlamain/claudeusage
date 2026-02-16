@@ -209,3 +209,63 @@ BOOL config_read_access_token(const wchar_t *credentials_path,
     cJSON_Delete(root);
     return TRUE;
 }
+
+/* Read the subscription type from credentials JSON.
+ *
+ * Why a separate function instead of combining with token read:
+ * - Separation of concerns: callers might only need one or the other
+ * - Keeps each function focused on a single task
+ * - File I/O cost is negligible compared to network I/O
+ *
+ * Why not cache the result:
+ * - Subscription type could change (user upgrades/downgrades plan)
+ * - Re-reading picks up changes automatically
+ * - File read is fast (~1ms), happens once per minute
+ */
+BOOL config_read_subscription_type(const wchar_t *credentials_path,
+                                   char *type, int type_len)
+{
+    HANDLE hFile = CreateFileW(credentials_path, GENERIC_READ, FILE_SHARE_READ,
+                               NULL, OPEN_EXISTING, 0, NULL);
+    if (hFile == INVALID_HANDLE_VALUE) return FALSE;
+
+    DWORD fileSize = GetFileSize(hFile, NULL);
+    if (fileSize == INVALID_FILE_SIZE || fileSize > 8192) {
+        CloseHandle(hFile);
+        return FALSE;
+    }
+
+    char *buf = (char *)malloc(fileSize + 1);
+    if (!buf) { CloseHandle(hFile); return FALSE; }
+
+    DWORD bytesRead;
+    if (!ReadFile(hFile, buf, fileSize, &bytesRead, NULL)) {
+        free(buf);
+        CloseHandle(hFile);
+        return FALSE;
+    }
+    CloseHandle(hFile);
+    buf[bytesRead] = '\0';
+
+    cJSON *root = cJSON_Parse(buf);
+    free(buf);
+    if (!root) return FALSE;
+
+    cJSON *oauth = cJSON_GetObjectItem(root, "claudeAiOauth");
+    if (!oauth) { cJSON_Delete(root); return FALSE; }
+
+    cJSON *st = cJSON_GetObjectItem(oauth, "subscriptionType");
+    if (!st || !cJSON_IsString(st)) {
+        /* Default to "pro" if field is missing (for backwards compatibility) */
+        strncpy(type, "pro", type_len - 1);
+        type[type_len - 1] = '\0';
+        cJSON_Delete(root);
+        return TRUE;
+    }
+
+    strncpy(type, st->valuestring, type_len - 1);
+    type[type_len - 1] = '\0';
+
+    cJSON_Delete(root);
+    return TRUE;
+}

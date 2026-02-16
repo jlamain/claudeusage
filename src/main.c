@@ -108,6 +108,11 @@ static void do_fetch(void)
     config_read_access_token(g_app.config.credentials_path,
                              g_app.access_token, MAX_TOKEN_LEN);
 
+    /* Also read subscription type (user might have upgraded/downgraded) */
+    config_read_subscription_type(g_app.config.credentials_path,
+                                  g_app.usage.subscription_type,
+                                  sizeof(g_app.usage.subscription_type));
+
     if (g_app.access_token[0] == '\0') {
         memset(&g_app.usage, 0, sizeof(g_app.usage));
         snprintf(g_app.usage.error, sizeof(g_app.usage.error),

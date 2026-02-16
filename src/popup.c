@@ -1,6 +1,8 @@
 #include "popup.h"
 #include "util.h"
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <commctrl.h>
 
 /* Base dimensions at 96 DPI (100% scaling) */
@@ -41,6 +43,59 @@ static COLORREF bar_color(double util)
     if (util < 60.0) return CLR_GREEN;
     if (util < 80.0) return CLR_YELLOW;
     return CLR_RED;
+}
+
+/* Format subscription type for display.
+ *
+ * Why format here instead of storing formatted version:
+ * - Raw value from API is the source of truth
+ * - Formatting logic is UI concern (belongs in popup.c)
+ * - Easy to update display format without touching data layer
+ *
+ * Subscription type formats:
+ * - "pro" → "Pro"
+ * - "max" → "Max"
+ * - "max_200" → "Max 20x"
+ * - "free" → "Free"
+ * - Unknown → "Pro" (conservative default)
+ */
+static void format_subscription_type(const char *type, wchar_t *out, int max_len)
+{
+    if (!type || type[0] == '\0') {
+        wcscpy(out, L"Pro");  /* Default if missing */
+        return;
+    }
+
+    /* Check for "max_NNN" format (e.g., "max_200" for Max 20x) */
+    if (strncmp(type, "max_", 4) == 0) {
+        int multiplier = atoi(type + 4);
+        if (multiplier > 0) {
+            _snwprintf(out, max_len, L"Max %dx", multiplier / 10);
+            return;
+        }
+    }
+
+    /* Simple type names: capitalize first letter */
+    if (strcmp(type, "max") == 0) {
+        wcscpy(out, L"Max");
+    } else if (strcmp(type, "pro") == 0) {
+        wcscpy(out, L"Pro");
+    } else if (strcmp(type, "free") == 0) {
+        wcscpy(out, L"Free");
+    } else {
+        /* Unknown type: capitalize first letter of raw value */
+        wchar_t *w = (wchar_t *)malloc((strlen(type) + 1) * sizeof(wchar_t));
+        if (w) {
+            MultiByteToWideChar(CP_UTF8, 0, type, -1, w, (int)strlen(type) + 1);
+            if (w[0] >= L'a' && w[0] <= L'z')
+                w[0] = w[0] - L'a' + L'A';  /* Capitalize */
+            wcsncpy(out, w, max_len - 1);
+            out[max_len - 1] = L'\0';
+            free(w);
+        } else {
+            wcscpy(out, L"Pro");  /* Fallback */
+        }
+    }
 }
 
 static void draw_progress_bar(HDC hdc, int x, int y, int w, int h, double util)
@@ -152,10 +207,14 @@ static LRESULT CALLBACK PopupProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPa
         int y = scale_for_dpi(12);
         int popup_width = scale_for_dpi(POPUP_WIDTH_BASE);
 
-        /* Title */
+        /* Title - format with subscription type */
+        wchar_t title[64];
+        wchar_t sub_type[32];
+        format_subscription_type(g_popup_data.subscription_type, sub_type, 32);
+        _snwprintf(title, 64, L"Claude %s Usage", sub_type);
         SelectObject(hdc, hTitle);
         SetTextColor(hdc, CLR_HEADER);
-        TextOutW(hdc, lx, y, L"Claude Pro Usage", 16);
+        TextOutW(hdc, lx, y, title, (int)wcslen(title));
         y += scale_for_dpi(28);
         draw_separator(hdc, lx, y, popup_width - scale_for_dpi(32));
         y += scale_for_dpi(10);

@@ -21,6 +21,11 @@ BOOL config_load(AppConfig *cfg);
 BOOL config_read_access_token(const wchar_t *credentials_path,
                               char *token, int token_len);
 
+/* Read the subscription type from the credentials JSON file.
+   Returns TRUE if subscription type was successfully extracted. */
+BOOL config_read_subscription_type(const wchar_t *credentials_path,
+                                   char *type, int type_len);
+
 /* Get the config directory path (%APPDATA%\claudeusage\). */
 void config_get_dir(wchar_t *path, int max_len);
 
