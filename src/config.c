@@ -89,9 +89,12 @@ static BOOL parse_config_file(const wchar_t *config_path, AppConfig *cfg)
                     wcsncpy(cfg->credentials_path, w, MAX_PATH_LEN - 1);
                     free(w);
                 }
-            } else if (strcmp(key, "poll_interval") == 0) {
+            } else if (strcmp(key, "api_poll_interval") == 0) {
                 int v = atoi(val);
-                if (v > 0) cfg->poll_interval_sec = v;
+                if (v > 0) cfg->api_poll_interval_sec = v;
+            } else if (strcmp(key, "subscription_poll_interval") == 0) {
+                int v = atoi(val);
+                if (v > 0) cfg->subscription_poll_interval_sec = v;
             }
         }
         line = strtok(NULL, "\r\n");
@@ -121,8 +124,13 @@ static void write_template_config(const wchar_t *config_path, const wchar_t *cre
         "# Example: C:\\Users\\<user>\\.claude\\.credentials.json\n"
         "credentials_path=%s\n"
         "\n"
-        "# Poll interval in seconds (default: 60)\n"
-        "poll_interval=60\n",
+        "# HTTP API poll interval in seconds (default: 300 = 5 minutes)\n"
+        "# How often to fetch usage data from Claude API\n"
+        "api_poll_interval=300\n"
+        "\n"
+        "# Subscription file poll interval in seconds (default: 1200 = 20 minutes)\n"
+        "# How often to re-read credentials file from disk\n"
+        "subscription_poll_interval=1200\n",
         cred_narrow);
 
     DWORD written;
@@ -133,7 +141,8 @@ static void write_template_config(const wchar_t *config_path, const wchar_t *cre
 BOOL config_load(AppConfig *cfg)
 {
     memset(cfg, 0, sizeof(*cfg));
-    cfg->poll_interval_sec = 60;
+    cfg->api_poll_interval_sec = 300;         /* 5 minutes */
+    cfg->subscription_poll_interval_sec = 1200; /* 20 minutes */
 
     wchar_t config_path[MAX_PATH_LEN];
     config_get_path(config_path, MAX_PATH_LEN);

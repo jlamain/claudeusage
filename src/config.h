@@ -8,7 +8,8 @@
 
 typedef struct {
     wchar_t credentials_path[MAX_PATH_LEN];
-    int     poll_interval_sec;  /* default 60 */
+    int     api_poll_interval_sec;          /* HTTP API poll interval (default 300 = 5 min) */
+    int     subscription_poll_interval_sec; /* Credentials file poll interval (default 1200 = 20 min) */
 } AppConfig;
 
 /* Load config from %APPDATA%\claudeusage\config.ini.

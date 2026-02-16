@@ -16,11 +16,12 @@
 #define IDI_RED     1003
 
 /* Custom messages and IDs */
-#define WM_TRAYICON     (WM_APP + 1)
-#define IDT_POLL_TIMER  1
-#define IDM_REFRESH     2001
-#define IDM_OPENCONFIG  2002
-#define IDM_EXIT        2003
+#define WM_TRAYICON            (WM_APP + 1)
+#define IDT_POLL_TIMER         1
+#define IDT_SUBSCRIPTION_TIMER 2
+#define IDM_REFRESH            2001
+#define IDM_OPENCONFIG         2002
+#define IDM_EXIT               2003
 
 #define TRAY_UID        100
 
@@ -102,7 +103,7 @@ static void show_error_balloon(const char *error)
     g_app.nid.uFlags &= ~NIF_INFO;
 }
 
-static void do_fetch(void)
+static void refresh_credentials(void)
 {
     /* Re-read access token (may have been refreshed by Claude Code) */
     config_read_access_token(g_app.config.credentials_path,
@@ -112,7 +113,10 @@ static void do_fetch(void)
     config_read_subscription_type(g_app.config.credentials_path,
                                   g_app.usage.subscription_type,
                                   sizeof(g_app.usage.subscription_type));
+}
 
+static void fetch_usage_data(void)
+{
     if (g_app.access_token[0] == '\0') {
         memset(&g_app.usage, 0, sizeof(g_app.usage));
         snprintf(g_app.usage.error, sizeof(g_app.usage.error),
@@ -138,6 +142,13 @@ static void do_fetch(void)
     } else {
         g_app.last_fetch_failed = FALSE;
     }
+}
+
+static void do_fetch(void)
+{
+    /* Full refresh: update credentials and fetch usage */
+    refresh_credentials();
+    fetch_usage_data();
 }
 
 static void show_context_menu(HWND hwnd)
@@ -179,17 +190,23 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg,
         return 0;
 
     case WM_TIMER:
-        if (wParam == IDT_POLL_TIMER)
-            do_fetch();
+        if (wParam == IDT_POLL_TIMER) {
+            fetch_usage_data();
+        } else if (wParam == IDT_SUBSCRIPTION_TIMER) {
+            refresh_credentials();
+        }
         return 0;
 
     case WM_COMMAND:
         switch (LOWORD(wParam)) {
         case IDM_REFRESH:
             KillTimer(hwnd, IDT_POLL_TIMER);
+            KillTimer(hwnd, IDT_SUBSCRIPTION_TIMER);
             do_fetch();
             SetTimer(hwnd, IDT_POLL_TIMER,
-                     (UINT)(g_app.config.poll_interval_sec * 1000), NULL);
+                     (UINT)(g_app.config.api_poll_interval_sec * 1000), NULL);
+            SetTimer(hwnd, IDT_SUBSCRIPTION_TIMER,
+                     (UINT)(g_app.config.subscription_poll_interval_sec * 1000), NULL);
             break;
         case IDM_OPENCONFIG: {
             wchar_t config_path[MAX_PATH_LEN];
@@ -283,11 +300,13 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 
     Shell_NotifyIconW(NIM_ADD, &g_app.nid);
 
-    /* Set up poll timer */
+    /* Set up timers with configurable intervals */
     SetTimer(g_app.hwnd, IDT_POLL_TIMER,
-             (UINT)(g_app.config.poll_interval_sec * 1000), NULL);
+             (UINT)(g_app.config.api_poll_interval_sec * 1000), NULL);
+    SetTimer(g_app.hwnd, IDT_SUBSCRIPTION_TIMER,
+             (UINT)(g_app.config.subscription_poll_interval_sec * 1000), NULL);
 
-    /* Immediate first fetch */
+    /* Immediate first fetch (both credentials and usage) */
     do_fetch();
 
     /* Message loop */
