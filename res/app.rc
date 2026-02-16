@@ -1,5 +1,8 @@
 #include <winresrc.h>
 
+/* Embed DPI awareness manifest */
+1 RT_MANIFEST "app.manifest"
+
 /* Tray icons: green (normal), yellow (warning), red (critical) */
 1001 ICON "app_green.ico"
 1002 ICON "app_yellow.ico"

@@ -3,8 +3,9 @@
 #include <stdio.h>
 #include <commctrl.h>
 
-#define POPUP_WIDTH  310
-#define POPUP_HEIGHT 280
+/* Base dimensions at 96 DPI (100% scaling) */
+#define POPUP_WIDTH_BASE  310
+#define POPUP_HEIGHT_BASE 280
 #define POPUP_CLASS  L"ClaudeUsagePopup"
 
 #define CLR_BG       RGB(255, 255, 255)
@@ -20,6 +21,19 @@
 
 static HWND g_popup = NULL;
 static UsageData g_popup_data;
+static int g_dpi = 96;  /* Current DPI, updated on window creation */
+
+/* Scale a dimension by current DPI.
+ *
+ * Why scale everything:
+ * - Fonts, coordinates, window size all need scaling
+ * - At 150% scaling (144 DPI), a 300px window becomes 450px
+ * - Keeps UI elements proportional and readable
+ */
+static int scale_for_dpi(int base_value)
+{
+    return MulDiv(base_value, g_dpi, 96);
+}
 
 static COLORREF bar_color(double util)
 {
@@ -65,16 +79,16 @@ static void draw_usage_section(HDC hdc, HFONT hBold, HFONT hNormal,
                                double util, const char *resets_iso)
 {
     int y = *py;
-    int lx = 16;
+    int lx = scale_for_dpi(16);
 
     /* Title */
     SelectObject(hdc, hBold);
     SetTextColor(hdc, CLR_LABEL);
     TextOutW(hdc, lx, y, title, (int)wcslen(title));
-    y += 20;
+    y += scale_for_dpi(20);
 
     /* Progress bar */
-    draw_progress_bar(hdc, lx, y, 200, 14, util);
+    draw_progress_bar(hdc, lx, y, scale_for_dpi(200), scale_for_dpi(14), util);
 
     /* Percentage text */
     wchar_t pct[32];
@@ -84,8 +98,8 @@ static void draw_usage_section(HDC hdc, HFONT hBold, HFONT hNormal,
         wcscpy(pct, L"N/A");
     SelectObject(hdc, hNormal);
     SetTextColor(hdc, bar_color(util));
-    TextOutW(hdc, lx + 210, y, pct, (int)wcslen(pct));
-    y += 20;
+    TextOutW(hdc, lx + scale_for_dpi(210), y, pct, (int)wcslen(pct));
+    y += scale_for_dpi(20);
 
     /* Reset time */
     if (resets_iso[0]) {
@@ -100,10 +114,10 @@ static void draw_usage_section(HDC hdc, HFONT hBold, HFONT hNormal,
         _snwprintf(line, 128, L"Resets in: %s", remaining);
         SetTextColor(hdc, CLR_MUTED);
         TextOutW(hdc, lx, y, line, (int)wcslen(line));
-        y += 18;
+        y += scale_for_dpi(18);
     }
 
-    y += 6;
+    y += scale_for_dpi(6);
     *py = y;
 }
 
@@ -123,36 +137,38 @@ static LRESULT CALLBACK PopupProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPa
 
         SetBkMode(hdc, TRANSPARENT);
 
-        /* Create fonts */
-        HFONT hTitle = CreateFontW(18, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+        /* Create DPI-scaled fonts */
+        HFONT hTitle = CreateFontW(scale_for_dpi(18), 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
             DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
             CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_SWISS, L"Segoe UI");
-        HFONT hBold = CreateFontW(14, 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE,
+        HFONT hBold = CreateFontW(scale_for_dpi(14), 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE,
             DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
             CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_SWISS, L"Segoe UI");
-        HFONT hNormal = CreateFontW(13, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+        HFONT hNormal = CreateFontW(scale_for_dpi(13), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
             DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
             CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_SWISS, L"Segoe UI");
 
-        int y = 12;
+        int lx = scale_for_dpi(16);  /* Left margin */
+        int y = scale_for_dpi(12);
+        int popup_width = scale_for_dpi(POPUP_WIDTH_BASE);
 
         /* Title */
         SelectObject(hdc, hTitle);
         SetTextColor(hdc, CLR_HEADER);
-        TextOutW(hdc, 16, y, L"Claude Pro Usage", 16);
-        y += 28;
-        draw_separator(hdc, 16, y, POPUP_WIDTH - 32);
-        y += 10;
+        TextOutW(hdc, lx, y, L"Claude Pro Usage", 16);
+        y += scale_for_dpi(28);
+        draw_separator(hdc, lx, y, popup_width - scale_for_dpi(32));
+        y += scale_for_dpi(10);
 
         if (!g_popup_data.valid) {
             SelectObject(hdc, hNormal);
             SetTextColor(hdc, CLR_RED);
             wchar_t *err = util_to_wide(g_popup_data.error);
             if (err) {
-                TextOutW(hdc, 16, y, err, (int)wcslen(err));
+                TextOutW(hdc, lx, y, err, (int)wcslen(err));
                 free(err);
             } else {
-                TextOutW(hdc, 16, y, L"Error fetching data", 19);
+                TextOutW(hdc, lx, y, L"Error fetching data", 19);
             }
         } else {
             /* 5-hour window */
@@ -173,43 +189,44 @@ static LRESULT CALLBACK PopupProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPa
                 _snwprintf(lbl, 64, L"7-Day Opus: %.0f%%", g_popup_data.opus_util);
                 SelectObject(hdc, hNormal);
                 SetTextColor(hdc, CLR_LABEL);
-                TextOutW(hdc, 16, y, lbl, (int)wcslen(lbl));
-                y += 18;
+                TextOutW(hdc, lx, y, lbl, (int)wcslen(lbl));
+                y += scale_for_dpi(18);
             }
             if (g_popup_data.sonnet_util >= 0) {
                 wchar_t lbl[64];
                 _snwprintf(lbl, 64, L"7-Day Sonnet: %.0f%%", g_popup_data.sonnet_util);
                 SelectObject(hdc, hNormal);
                 SetTextColor(hdc, CLR_LABEL);
-                TextOutW(hdc, 16, y, lbl, (int)wcslen(lbl));
-                y += 18;
+                TextOutW(hdc, lx, y, lbl, (int)wcslen(lbl));
+                y += scale_for_dpi(18);
             }
 
             /* Extra credits */
             if (g_popup_data.extra_enabled) {
-                draw_separator(hdc, 16, y, POPUP_WIDTH - 32);
-                y += 8;
+                draw_separator(hdc, lx, y, popup_width - scale_for_dpi(32));
+                y += scale_for_dpi(8);
                 wchar_t credits[128];
                 _snwprintf(credits, 128, L"Extra Credits: $%.2f / $%.2f",
                     g_popup_data.extra_used / 100.0,
                     g_popup_data.extra_limit / 100.0);
                 SelectObject(hdc, hNormal);
                 SetTextColor(hdc, CLR_LABEL);
-                TextOutW(hdc, 16, y, credits, (int)wcslen(credits));
-                y += 20;
+                TextOutW(hdc, lx, y, credits, (int)wcslen(credits));
+                y += scale_for_dpi(20);
             }
         }
 
         /* Timestamp */
+        int popup_height = scale_for_dpi(POPUP_HEIGHT_BASE);
         SYSTEMTIME now;
         GetLocalTime(&now);
         wchar_t ts[64];
         _snwprintf(ts, 64, L"Updated: %02d:%02d:%02d",
                    now.wHour, now.wMinute, now.wSecond);
-        draw_separator(hdc, 16, POPUP_HEIGHT - 30, POPUP_WIDTH - 32);
+        draw_separator(hdc, lx, popup_height - scale_for_dpi(30), popup_width - scale_for_dpi(32));
         SelectObject(hdc, hNormal);
         SetTextColor(hdc, CLR_MUTED);
-        TextOutW(hdc, 16, POPUP_HEIGHT - 22, ts, (int)wcslen(ts));
+        TextOutW(hdc, lx, popup_height - scale_for_dpi(22), ts, (int)wcslen(ts));
 
         DeleteObject(hTitle);
         DeleteObject(hBold);
@@ -255,24 +272,47 @@ void popup_show(HINSTANCE hInstance, const UsageData *usage)
         return;
     }
 
-    /* Position above cursor (near tray area) */
+    /* Get DPI for the monitor where cursor is (for multi-monitor setups).
+     * We query DPI before creating the window to size it correctly. */
     POINT pt;
     GetCursorPos(&pt);
-    int x = pt.x - POPUP_WIDTH / 2;
-    int y = pt.y - POPUP_HEIGHT - 8;
+    HMONITOR hMonitor = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+
+    /* Get DPI for this monitor (fallback to 96 DPI if API unavailable) */
+    typedef HRESULT (WINAPI *GetDpiForMonitorFunc)(HMONITOR, int, UINT*, UINT*);
+    HMODULE hShcore = LoadLibraryW(L"shcore.dll");
+    if (hShcore) {
+        GetDpiForMonitorFunc pGetDpiForMonitor =
+            (GetDpiForMonitorFunc)GetProcAddress(hShcore, "GetDpiForMonitor");
+        if (pGetDpiForMonitor) {
+            UINT dpiX = 96, dpiY = 96;
+            pGetDpiForMonitor(hMonitor, 0 /* MDT_EFFECTIVE_DPI */, &dpiX, &dpiY);
+            g_dpi = (int)dpiX;
+        }
+        FreeLibrary(hShcore);
+    }
+    if (g_dpi == 0) g_dpi = 96;  /* Fallback */
+
+    /* Calculate DPI-scaled dimensions */
+    int popup_width = scale_for_dpi(POPUP_WIDTH_BASE);
+    int popup_height = scale_for_dpi(POPUP_HEIGHT_BASE);
+
+    /* Position above cursor (near tray area) */
+    int x = pt.x - popup_width / 2;
+    int y = pt.y - popup_height - scale_for_dpi(8);
 
     /* Clamp to screen */
     RECT workArea;
     SystemParametersInfoW(SPI_GETWORKAREA, 0, &workArea, 0);
     if (x < workArea.left) x = workArea.left;
-    if (x + POPUP_WIDTH > workArea.right) x = workArea.right - POPUP_WIDTH;
+    if (x + popup_width > workArea.right) x = workArea.right - popup_width;
     if (y < workArea.top) y = workArea.top;
 
     g_popup = CreateWindowExW(
         WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
         POPUP_CLASS, NULL,
         WS_POPUP | WS_BORDER,
-        x, y, POPUP_WIDTH, POPUP_HEIGHT,
+        x, y, popup_width, popup_height,
         NULL, NULL, hInstance, NULL);
 
     ShowWindow(g_popup, SW_SHOW);
